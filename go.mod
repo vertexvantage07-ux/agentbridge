@@ -1,3 +1,3 @@
-module github.com/FRIDAY-HANDLE/agentbridge
+module github.com/vertexvantage07-ux/agentbridge
 
 go 1.22

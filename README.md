@@ -110,8 +110,13 @@ non-retryable errors, bounded jitter, zero-config operation, and concurrent use
 from 32 goroutines.
 
 ```
-ok  github.com/FRIDAY-HANDLE/agentbridge/agentbridge  1.028s
+ok  github.com/vertexvantage07-ux/agentbridge/agentbridge  1.028s
 ```
+
+## License
+
+MIT. See LICENSE.
+
 
 ## License
 
