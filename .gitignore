@@ -1,0 +1,8 @@
+# build artefacts
+*.exe
+*.test
+*.out
+# editors
+.vscode/
+.idea/
+.DS_Store
