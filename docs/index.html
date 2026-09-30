@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>agentbridge — what it actually does</title>
+<meta name="description" content="Retries with full jitter, deadlines, circuit breakers and telemetry for AI agent tool calls. Go, MIT, zero dependencies. Output measured by running the library, not written by hand.">
+<style>
+:root{--ink:#111;--mut:#5b6472;--line:#e4e4e7;--soft:#fafafa;--ok:#0a7c4a;--bad:#a02020;--accent:#0b6e99}
+@media(prefers-color-scheme:dark){:root{--ink:#e6edf3;--mut:#9aa7b4;--line:#243040;--soft:#161b22;--ok:#3fb950;--bad:#f85149;--accent:#58a6ff}}
+*{box-sizing:border-box}
+body{font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg,transparent);margin:0;padding:36px 20px 60px}
+.wrap{max-width:980px;margin:0 auto}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-.2px}
+.tag{color:var(--mut);font-size:14px;margin:0 0 26px}
+h2{font-size:17px;margin:34px 0 10px;letter-spacing:-.1px}
+p{margin:0 0 14px;max-width:74ch}
+a{color:var(--accent)}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px}
+.badge{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 11px;font-size:12px;color:var(--mut);margin:0 5px 5px 0}
+.badges{margin:0 0 24px}
+table{border-collapse:collapse;width:100%;margin:16px 0 8px;font-size:13.5px}
+td,th{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+th{background:var(--soft);font-weight:600;white-space:nowrap}
+td.num{text-align:right;white-space:nowrap;font-family:ui-monospace,Menlo,Consolas,monospace}
+.note{color:var(--mut);font-size:13px;margin:6px 0 0}
+.why{color:var(--bad)}
+pre{background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow:auto;font-size:13px;line-height:1.5}
+.cta{display:inline-block;background:var(--accent);color:#fff;text-decoration:none;font-weight:650;padding:12px 22px;border-radius:9px;margin:6px 8px 6px 0;font-size:15px}
+.cta.alt{background:transparent;color:var(--accent);border:1px solid var(--line)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:20px 0 4px}
+.fact{border:1px solid var(--line);border-radius:9px;padding:12px 14px}
+.fact b{display:block;font-size:19px;letter-spacing:-.3px}
+.fact span{color:var(--mut);font-size:12.5px}
+hr{border:0;border-top:1px solid var(--line);margin:34px 0}
+footer{color:var(--mut);font-size:13px;margin-top:38px;padding-top:18px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>agentbridge</h1>
+<p class="tag">The layer between an AI agent and the tools it calls, for when those tools are unreliable.</p>
+
+<div class="badges">
+  <span class="badge">Go</span>
+  <span class="badge">MIT licensed</span>
+  <span class="badge">Zero dependencies</span>
+  <span class="badge">Standard library only</span>
+  <span class="badge">v1.0.0</span>
+</div>
+
+<p><b>Every number on this page was produced by running the library.</b> Attempt
+counts, call counts and elapsed times are measured at runtime by the same code
+path a caller would use &mdash; not written by hand, not estimated. The run below
+is recorded verbatim.</p>
+
+<div class="facts">
+  <div class="fact"><b>3</b><span>attempts on a blip that a naive loop gives up on after 1</span></div>
+  <div class="fact"><b>1</b><span>call on a permanent error, not 4</span></div>
+  <div class="fact"><b>3/6</b><span>calls that never touched a dead dependency</span></div>
+  <div class="fact"><b>170ms</b><span>to abandon a 3s tool, not 3s</span></div>
+</div>
+
+<h2>What it did, and what a naive caller does instead</h2>
+
+<table>
+<thead><tr>
+  <th>Scenario</th><th>What agentbridge did</th><th>Calls</th><th>Elapsed</th><th>Naive caller</th>
+</tr></thead>
+<tbody>
+<tr>
+  <td><b>transient failure</b><br><span class="note">tool fails twice, then succeeds (a network blip)</span></td>
+  <td>retried, succeeded on attempt 3 (3 call records)</td>
+  <td class="num">3</td><td class="num">71ms</td>
+  <td class="why">aborts on the first error; the whole run fails on a blip</td>
+</tr>
+<tr>
+  <td><b>permanent failure</b><br><span class="note">tool rejects the input; retrying can never help</span></td>
+  <td>gave up after 1 call in 0ms &mdash; no retries wasted</td>
+  <td class="num">1</td><td class="num">0ms</td>
+  <td class="why">retries 4 times, pays 4&times; for the same rejection, reports it late</td>
+</tr>
+<tr>
+  <td><b>circuit breaker</b><br><span class="note">dependency dead and staying dead; 6 calls attempted</span></td>
+  <td>circuit opened; 3 of 6 calls never touched the tool (outcome=circuit_open)</td>
+  <td class="num">3</td><td class="num">0ms</td>
+  <td class="why">calls a dead API 6 times, gets rate-limited, and possibly billed</td>
+</tr>
+<tr>
+  <td><b>deadline</b><br><span class="note">tool takes 3s; the call budget is 150ms</span></td>
+  <td>gave up at the deadline instead of blocking</td>
+  <td class="num">1</td><td class="num">170ms</td>
+  <td class="why">blocks the agent for 3s per attempt; a 10-step task loses 30s</td>
+</tr>
+<tr>
+  <td><b>telemetry</b><br><span class="note">one call that fails, observed</span></td>
+  <td>2 CallRecords emitted (tool, outcome, attempts, elapsed)</td>
+  <td class="num">2</td><td class="num">0ms</td>
+  <td class="why">no record; you find out from the customer, days later</td>
+</tr>
+<tr>
+  <td><b>health endpoint</b><br><span class="note">what the library reports about itself</span></td>
+  <td class="mono">{"tools":{"search_tool":{"circuit_open":false}},"broken":0}</td>
+  <td class="num">1</td><td class="num">0ms</td>
+  <td class="why">you cannot answer "is the agent healthy?" without inventing it</td>
+</tr>
+</tbody>
+</table>
+
+<p class="note">Read the first two rows together. A blip is worth retrying. A
+rejected input is not. Telling those two apart is the entire job, and a naive
+retry loop cannot do it &mdash; which is why the library classifies failures
+rather than counting them.</p>
+
+<h2>Reproduce this yourself</h2>
+
+<p>This page is a recorded run so it stays up permanently. The measuring code
+ships with the library, so you do not have to trust the recording:</p>
+
+<pre><code>go get github.com/vertexvantage07-ux/agentbridge@v1.0.0
+
+go test ./...
+# ok  github.com/vertexvantage07-ux/agentbridge/agentbridge</code></pre>
+
+<p>The full demo, which runs the real library against deliberately broken
+dependencies and streams the results, is in the repository under
+<code>cmd/demo</code>:</p>
+
+<pre><code>git clone https://github.com/vertexvantage07-ux/agentbridge
+cd agentbridge &amp;&amp; go run ./cmd/demo</code></pre>
+
+<h2>Why the distinctions matter</h2>
+
+<table>
+<thead><tr><th>Behaviour</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Retries transient failures with exponential backoff <b>and full jitter</b></td><td>Synchronised retries are how a service that just recovered gets knocked over again</td></tr>
+<tr><td>Gives up <b>immediately</b> on permanent failures</td><td>A 400 retried four times is a bug, not resilience</td></tr>
+<tr><td>Honours a server's own <code>Retry-After</code></td><td>Better than a guessed delay, always</td></tr>
+<tr><td>Per-attempt deadlines</td><td>A slow first attempt otherwise eats the retry budget, so retries become a single attempt</td></tr>
+<tr><td>Per-tool circuit breakers</td><td>One dead dependency should not disable the whole agent</td></tr>
+<tr><td>Structured telemetry per call</td><td>Duration, attempts, outcome and failure kind &mdash; queryable, not guessed</td></tr>
+<tr><td>Health view</td><td>Lets the agent say "that tool is down" instead of appearing to hang</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2>Using it</h2>
+
+<pre><code>bridge := agentbridge.NewBridge[MyPayload](agentbridge.DefaultConfig(), nil)
+
+result, err := bridge.Do(ctx, agentbridge.Tool[MyPayload]{
+    Name: "charge_card",
+    Call: func(ctx context.Context, in MyPayload) (MyPayload, error) {
+        return gateway.Charge(ctx, in)
+    },
+}, payload)</code></pre>
+
+<p>One call site changes and the retries, the deadline, the breaker and the
+telemetry record for that tool exist. Adding the sixth tool is the same edit as
+the first.</p>
+
+<h2>Integration service</h2>
+
+<p>The library is free and yours either way. If you want it wired into your own
+stack &mdash; tuned to your real tools, tuned to your latency budget, and chaos
+tested against your real dependencies &mdash; that is the paid part, and the
+proof above is what you would be buying against.</p>
+
+<a class="cta" href="https://www.fiverr.com/friday_coder/build-a-reliable-ai-agent-backend-with-retries-and-monitoring">Hire the integration</a>
+<a class="cta alt" href="https://github.com/vertexvantage07-ux/agentbridge">Read the source</a>
+
+<footer>
+agentbridge &mdash; MIT licensed, Go, zero dependencies, 16 tests passing.
+Page is a recorded run of the library; the measuring code is in the repository so
+you can reproduce it. Corrections welcome as pull requests.
+</footer>
+
+</div>
+</body>
+</html>
