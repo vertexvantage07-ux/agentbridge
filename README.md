@@ -9,6 +9,26 @@ Zero dependencies. Standard library only.
 go test ./...     # 16 tests, ~1s
 ```
 
+## Show me, don't tell me
+
+Claims about resilience libraries are cheap, so here is the library running
+against deliberately broken dependencies. Every number below is printed at
+runtime by the code path your agent would take — attempt counts, call counts
+and elapsed times are all measured, not written by hand.
+
+| Scenario | What agentbridge did |
+|---|---|
+| tool fails twice, then succeeds | retried, succeeded on attempt **3**, 3 call records, 55ms |
+| tool rejects the input (can never succeed) | gave up after **1 call in 0ms** — no retries wasted |
+| dependency dead, 6 calls attempted | circuit opened; **3 of 6 never touched the tool** |
+| tool takes 3s, budget is 150ms | gave up at the **deadline** instead of blocking |
+| one failing call | **2 `CallRecord`s** emitted: tool, outcome, attempts, elapsed |
+| health query | `{"tools":{"search_tool":{"circuit_open":false}},"broken":0}` |
+
+Read those two rows together. The first is a blip, and retrying it is correct.
+The second is a rejected input, and retrying it would have paid for the same
+failure three more times. The library tells them apart; a naive loop does not.
+
 ## Why this exists
 
 The recurring failure mode of an agent wired straight to tools is not a bad
